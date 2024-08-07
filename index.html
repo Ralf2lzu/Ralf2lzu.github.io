@@ -1,0 +1,190 @@
+<html><head><base href="https://ofm.fr/" target="_blank"><title>OFM - IP, Localisation et Score IP</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background-color: #001f3f;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+.container {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+}
+h1 {
+    color: #ffd700;
+}
+#ip, #oldIp, #location, #ipScore {
+    font-size: 18px;
+    margin: 10px 0;
+}
+#loading {
+    color: #aaa;
+    font-style: italic;
+}
+#scoreBar {
+    width: 100%;
+    height: 20px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    margin-top: 10px;
+}
+#scoreBarFill {
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.5s ease-in-out;
+}
+#refreshButton {
+    margin-top: 20px;
+    padding: 10px 20px;
+    font-size: 16px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+#refreshButton:hover {
+    background-color: #45a049;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>OFM</h1>
+    <p id="ip">Chargement de votre adresse IP...</p>
+    <p id="oldIp">Pas d'ancienne IP enregistrée</p>
+    <p id="location">Chargement de votre localisation précise...</p>
+    <p id="ipScore">Calcul du score de votre IP...</p>
+    <div id="scoreBar"><div id="scoreBarFill"></div></div>
+    <p id="loading">Détermination de votre position...</p>
+    <button id="refreshButton">Actualiser</button>
+</div>
+
+<script>
+let lastIP = '';
+let lastChangeTime = '';
+
+function getIP() {
+    fetch('https://api.ipify.org?format=json')
+        .then(response => response.json())
+        .then(data => {
+            const currentIP = data.ip;
+            const currentTime = new Date().toLocaleString();
+            
+            if (lastIP && lastIP !== currentIP) {
+                document.getElementById('oldIp').textContent = `Ancienne IP : ${lastIP} (changée le ${lastChangeTime})`;
+            }
+            
+            if (lastIP !== currentIP) {
+                lastIP = currentIP;
+                lastChangeTime = currentTime;
+                localStorage.setItem('lastIP', lastIP);
+                localStorage.setItem('lastChangeTime', lastChangeTime);
+            }
+            
+            document.getElementById('ip').textContent = `Votre adresse IP : ${currentIP}`;
+            calculateIPScore(currentIP);
+        })
+        .catch(error => {
+            console.error('Erreur lors de la récupération de l\'IP:', error);
+            document.getElementById('ip').textContent = "Impossible d'obtenir votre adresse IP";
+        });
+}
+
+function getPreciseLocation() {
+    const loadingElement = document.getElementById('loading');
+    const locationElement = document.getElementById('location');
+
+    loadingElement.style.display = 'block';
+    locationElement.style.display = 'none';
+
+    if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`)
+                .then(response => response.json())
+                .then(data => {
+                    const city = data.address.city || data.address.town || data.address.village || 'Ville inconnue';
+                    locationElement.textContent = `Votre ville : ${city}`;
+                    loadingElement.style.display = 'none';
+                    locationElement.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Erreur lors de la récupération de la ville:', error);
+                    locationElement.textContent = "Impossible d'obtenir la ville précise";
+                    loadingElement.style.display = 'none';
+                    locationElement.style.display = 'block';
+                });
+        }, function(error) {
+            console.error("Erreur de géolocalisation:", error);
+            locationElement.textContent = "Impossible d'obtenir la ville précise. Veuillez autoriser l'accès à votre position.";
+            loadingElement.style.display = 'none';
+            locationElement.style.display = 'block';
+        });
+    } else {
+        locationElement.textContent = "La géolocalisation n'est pas prise en charge par votre navigateur.";
+        loadingElement.style.display = 'none';
+        locationElement.style.display = 'block';
+    }
+}
+
+function calculateIPScore(ip) {
+    const ipParts = ip.split('.');
+    const score = (parseInt(ipParts[0]) + parseInt(ipParts[1]) + parseInt(ipParts[2]) + parseInt(ipParts[3])) % 100;
+    
+    const scoreElement = document.getElementById('ipScore');
+    const scoreBarFill = document.getElementById('scoreBarFill');
+    
+    scoreElement.textContent = `Score de votre IP : ${score}/100`;
+    scoreBarFill.style.width = `${score}%`;
+    
+    if (score < 33) {
+        scoreBarFill.style.backgroundColor = '#4CAF50';
+    } else if (score < 66) {
+        scoreBarFill.style.backgroundColor = '#FFA500';
+    } else {
+        scoreBarFill.style.backgroundColor = '#F44336';
+    }
+}
+
+function refreshPage() {
+    document.getElementById('ip').textContent = "Chargement de votre adresse IP...";
+    document.getElementById('location').textContent = "Chargement de votre localisation précise...";
+    document.getElementById('ipScore').textContent = "Calcul du score de votre IP...";
+    document.getElementById('scoreBarFill').style.width = "0%";
+    document.getElementById('loading').style.display = 'block';
+    
+    getIP();
+    getPreciseLocation();
+}
+
+function loadPreviousIP() {
+    lastIP = localStorage.getItem('lastIP') || '';
+    lastChangeTime = localStorage.getItem('lastChangeTime') || '';
+    if (lastIP && lastChangeTime) {
+        document.getElementById('oldIp').textContent = `Ancienne IP : ${lastIP} (changée le ${lastChangeTime})`;
+    }
+}
+
+// Exécuter les fonctions dès le chargement de la page
+loadPreviousIP();
+getIP();
+getPreciseLocation();
+
+// Ajouter un écouteur d'événement pour le bouton d'actualisation
+document.getElementById('refreshButton').addEventListener('click', refreshPage);
+</script>
+</body>
+</html>
